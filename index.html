@@ -5,6 +5,61 @@
         <meta name="viewport" content="width=device-width, user-scalable=no">
         <script src="https://unpkg.com/@cmdcode/tapscript@1.4.0"></script>
         <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
+        <script>
+            var isValidAddress = address => {
+                try {
+                    return !!tapscript.Address.decode( address ).script;
+                } catch( e ) {return;}
+                return;
+            }
+            var getData = url => {
+                return new Promise( async function( resolve, reject ) {
+                    function inner_get( url ) {
+                        var xhttp = new XMLHttpRequest();
+                        xhttp.open( "GET", url, true );
+                        xhttp.send();
+                        return xhttp;
+                    }
+                    var data = inner_get( url );
+                    data.onerror = function( e ) {
+                        resolve( "error" );
+                    }
+                    async function isResponseReady() {
+                        return new Promise( function( resolve2, reject ) {
+                            if ( !data.responseText || data.readyState != 4 ) {
+                                setTimeout( async function() {
+                                    var msg = await isResponseReady();
+                                    resolve2( msg );
+                                }, 1 );
+                            } else {
+                                resolve2( data.responseText );
+                            }
+                        });
+                    }
+                    var returnable = await isResponseReady();
+                    resolve( returnable );
+                });
+            }
+            async function getUTXOs( privkey, network ) {
+                var url_half = `https://mempool.space/${network}`;
+                if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
+                var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
+                var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
+                var esplorautxos = await getData( url_half + "api/address/" + address + "/utxo" );
+                esplorautxos = JSON.parse( esplorautxos );
+                var obj = [];
+                esplorautxos.forEach( function( item, index ) {
+                    var utxo = {}
+                    utxo[ "tx_id" ] = item[ "txid" ];
+                    utxo[ "output_number" ] = item[ "vout" ];
+                    utxo[ "amount" ] = item[ "value" ];
+                    utxo[ "privkey" ] = privkey;
+                    utxo[ "pubkey" ] = pubkey;
+                    obj.push( utxo );
+                });
+                return( obj );
+            }
+        </script>
         <style>
             * {
                 box-sizing: border-box;
@@ -44,9 +99,13 @@
             .hidden {
                 display: none !important;
             }
+            .setup, .wallet {
+                padding: 1rem;
+                border: 1px solid black;
+                border-radius: 1rem;
+            }
             .wallet {
                 display: flex;
-                height: calc( 100% - 2rem );
                 justify-content: center;
                 flex-direction: column;
                 align-items: center;
@@ -58,6 +117,15 @@
             .send {
                 margin-top: 1rem;
                 width: auto;
+            }
+            select {
+                width: auto;
+            }
+            .submit_form {
+                width: auto;
+            }
+            .address, .privkey {
+                max-width: 20rem;
             }
             @media screen and (max-width: 600px) {
             }
@@ -87,65 +155,24 @@
             <div><span class="balance">0</span> sats</div>
             <div><button class="send">Send</button></div>
         </div>
+        <div class="setup hidden">
+            <p>Enter a private key</p>
+            <p><input class="privkey"></p>
+            <p>Select a network</p>
+            <select class="network_selector">
+                <option>Testnet3</option>
+                <option>Testnet4</option>
+                <option>Signet</option>
+                <option>Mutinynet</option>
+            </select>
+            <p><button class="submit_form">Submit</button></p>
+        </div>
         <script>
-            if ( Object.keys( params ).length ) {
-                var utxos = [];
+            var utxos = [];
+            var runPrep = async () => {
                 var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
                 var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
                 $( '.address' ).innerText = address;
-                var isValidAddress = address => {
-                    try {
-                        return !!tapscript.Address.decode( address ).script;
-                    } catch( e ) {return;}
-                    return;
-                }
-                var getData = url => {
-                    return new Promise( async function( resolve, reject ) {
-                        function inner_get( url ) {
-                            var xhttp = new XMLHttpRequest();
-                            xhttp.open( "GET", url, true );
-                            xhttp.send();
-                            return xhttp;
-                        }
-                        var data = inner_get( url );
-                        data.onerror = function( e ) {
-                            resolve( "error" );
-                        }
-                        async function isResponseReady() {
-                            return new Promise( function( resolve2, reject ) {
-                                if ( !data.responseText || data.readyState != 4 ) {
-                                    setTimeout( async function() {
-                                        var msg = await isResponseReady();
-                                        resolve2( msg );
-                                    }, 1 );
-                                } else {
-                                    resolve2( data.responseText );
-                                }
-                            });
-                        }
-                        var returnable = await isResponseReady();
-                        resolve( returnable );
-                    });
-                }
-                async function getUTXOs( privkey, network ) {
-                    var url_half = `https://mempool.space/${network}`;
-                    if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
-                    var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
-                    var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
-                    var esplorautxos = await getData( url_half + "api/address/" + address + "/utxo" );
-                    esplorautxos = JSON.parse( esplorautxos );
-                    var obj = [];
-                    esplorautxos.forEach( function( item, index ) {
-                        var utxo = {}
-                        utxo[ "tx_id" ] = item[ "txid" ];
-                        utxo[ "output_number" ] = item[ "vout" ];
-                        utxo[ "amount" ] = item[ "value" ];
-                        utxo[ "privkey" ] = privkey;
-                        utxo[ "pubkey" ] = pubkey;
-                        obj.push( utxo );
-                    });
-                    return( obj );
-                }
                 $( '.send' ).onclick = async () => {
                     var destino = prompt( `enter the address you want to send money to` );
                     if ( !isValidAddress( destino ) ) return;
@@ -189,14 +216,27 @@
                     console.log( txhex );
                     alert( `broadcast the tx in your browser console` );
                 }
-                (async()=>{
-                    var privkey = params[ "privkey" ];
-                    var network = params[ "network" ] + "/";
-                    utxos = await getUTXOs( privkey, network );
-                    var sum = 0;
-                    utxos.forEach( utxo => sum = sum + utxo[ "amount" ] );
-                    $( '.balance' ).innerText = sum.toLocaleString();
-                })();
+                var privkey = params[ "privkey" ];
+                var network = params[ "network" ] + "/";
+                utxos = await getUTXOs( privkey, network );
+                var sum = 0;
+                utxos.forEach( utxo => sum = sum + utxo[ "amount" ] );
+                $( '.balance' ).innerText = sum.toLocaleString();
+                $( '.setup' ).classList.add( "hidden" );
+                $( '.wallet' ).classList.remove( "hidden" );
+            }
+            if ( !Object.keys( params ).length ) {
+                $( '.wallet' ).classList.add( "hidden" );
+                $( '.setup' ).classList.remove( "hidden" );
+            } else {
+                runPrep();
+            }
+            $( '.submit_form' ).onclick = () => {
+                params[ "privkey" ] = $( '.privkey' ).value;
+                var network = $( '.network_selector' ).value.toLowerCase();
+                if ( network === "testnet3" ) network = "testnet";
+                params[ "network" ] = network;
+                runPrep();
             }
         </script>
     </body>
