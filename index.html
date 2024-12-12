@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no">
+        <script src="https://unpkg.com/@cmdcode/tapscript@1.4.0"></script>
+        <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
+        <style>
+            * {
+                box-sizing: border-box;
+                font-size: 1.15rem;
+                font-family: Arial, sans-serif;
+            }
+            html {
+                max-width: 800px;
+                padding: 3rem 1rem;
+                margin: auto;
+                line-height: 1.25;
+                padding: 0;
+                height: 100%;
+            }
+            body {
+                margin: 3rem 1rem;
+                height: calc( 100% - 6rem );
+            }
+            body * {
+                width: 100%;
+                text-align: center;
+                word-wrap: break-word;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+            input {
+                line-height: 1.25;
+                width: 100%;
+                height: 1.8rem;
+                font-size: 1.15rem;
+                border: 1px solid grey;
+            }
+            .hidden {
+                display: none !important;
+            }
+            .wallet {
+                display: flex;
+                height: calc( 100% - 2rem );
+                justify-content: center;
+                flex-direction: column;
+                align-items: center;
+            }
+            .label {
+                margin-top: 1rem;
+                font-weight: bold;
+            }
+            .send {
+                margin-top: 1rem;
+                width: auto;
+            }
+            @media screen and (max-width: 600px) {
+            }
+        </style>
+        <script>
+            var $ = document.querySelector.bind( document );
+            var $$ = document.querySelectorAll.bind( document );
+            var url_params = new URLSearchParams( window.location.search );
+            var url_keys = url_params.keys();
+            var $_GET = {}
+            for ( var key of url_keys ) $_GET[ key ] = url_params.get( key );
+            var hash_arr = window.location.href.substring( window.location.href.indexOf( "#" ) ).split( "#" );
+            hash_arr.splice( 0, 1 );
+            var params = {}
+            hash_arr.forEach( item => {
+                var vals = item.split( "=" );
+                params[ vals[ 0 ] ] = vals[ 1 ];
+            });
+        </script>
+    </head>
+    <body>
+        <h1>Testnet faucet</h1>
+        <div class="wallet">
+            <div class="label">Address</div>
+            <div class="address"></div>
+            <div class="label">Balance</div>
+            <div><span class="balance">0</span> sats</div>
+            <div><button class="send">Send</button></div>
+        </div>
+        <script>
+            if ( Object.keys( params ).length ) {
+                var utxos = [];
+                var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
+                var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
+                $( '.address' ).innerText = address;
+                var isValidAddress = address => {
+                    try {
+                        return !!tapscript.Address.decode( address ).script;
+                    } catch( e ) {return;}
+                    return;
+                }
+                var getData = url => {
+                    return new Promise( async function( resolve, reject ) {
+                        function inner_get( url ) {
+                            var xhttp = new XMLHttpRequest();
+                            xhttp.open( "GET", url, true );
+                            xhttp.send();
+                            return xhttp;
+                        }
+                        var data = inner_get( url );
+                        data.onerror = function( e ) {
+                            resolve( "error" );
+                        }
+                        async function isResponseReady() {
+                            return new Promise( function( resolve2, reject ) {
+                                if ( !data.responseText || data.readyState != 4 ) {
+                                    setTimeout( async function() {
+                                        var msg = await isResponseReady();
+                                        resolve2( msg );
+                                    }, 1 );
+                                } else {
+                                    resolve2( data.responseText );
+                                }
+                            });
+                        }
+                        var returnable = await isResponseReady();
+                        resolve( returnable );
+                    });
+                }
+                async function getUTXOs( privkey, network ) {
+                    var url_half = `https://mempool.space/${network}`;
+                    if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
+                    var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
+                    var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
+                    var esplorautxos = await getData( url_half + "api/address/" + address + "/utxo" );
+                    esplorautxos = JSON.parse( esplorautxos );
+                    var obj = [];
+                    esplorautxos.forEach( function( item, index ) {
+                        var utxo = {}
+                        utxo[ "tx_id" ] = item[ "txid" ];
+                        utxo[ "output_number" ] = item[ "vout" ];
+                        utxo[ "amount" ] = item[ "value" ];
+                        utxo[ "privkey" ] = privkey;
+                        utxo[ "pubkey" ] = pubkey;
+                        obj.push( utxo );
+                    });
+                    return( obj );
+                }
+                $( '.send' ).onclick = async () => {
+                    var destino = prompt( `enter the address you want to send money to` );
+                    if ( !isValidAddress( destino ) ) return;
+                    var amnt = Number( prompt( `enter how many sats you want to send there` ) );
+                    if ( !amnt || isNaN( amnt ) ) return;
+                    var vin = [];
+                    var utxos_i_will_use = [];
+                    utxos.forEach( utxo => {
+                        if ( utxo[ "amount" ] > 1000000000 ) utxos_i_will_use.push( utxo );
+                    });
+                    var sum = 0;
+                    utxos_i_will_use.forEach( utxo => sum = sum + utxo[ "amount" ] );
+                    var change_amnt = sum - amnt - ( 500 + ( 200 * utxos_i_will_use.length ) );
+                    var change_addy = address;
+                    utxos_i_will_use.forEach( utxo => {
+                        vin.push({
+                            txid: utxo[ "tx_id" ],
+                            vout: utxo[ "output_number" ],
+                            prevout: {
+                                value: utxo[ "amount" ],
+                                scriptPubKey: [ 1, utxo[ "pubkey" ] ],
+                            }
+                        });
+                    })
+                    var tx = tapscript.Tx.create({
+                        vin,
+                        vout: [{
+                            value: amnt,
+                            scriptPubKey: tapscript.Address.toScriptPubKey( destino ),
+                        },{
+                            value: change_amnt,
+                            scriptPubKey: tapscript.Address.toScriptPubKey( change_addy ),
+                        }],
+                    });
+                    utxos_i_will_use.forEach( ( utxo, index ) => {
+                        var sig = tapscript.Signer.taproot.sign( utxo[ "privkey" ], tx, index );
+                        tx.vin[ index ].witness = [ sig ];
+                    });
+                    var txhex = tapscript.Tx.encode( tx ).hex;
+                    console.log( 'broadcast this:' );
+                    console.log( txhex );
+                    alert( `broadcast the tx in your browser console` );
+                }
+                (async()=>{
+                    var privkey = params[ "privkey" ];
+                    var network = params[ "network" ] + "/";
+                    utxos = await getUTXOs( privkey, network );
+                    var sum = 0;
+                    utxos.forEach( utxo => sum = sum + utxo[ "amount" ] );
+                    $( '.balance' ).innerText = sum.toLocaleString();
+                })();
+            }
+        </script>
+    </body>
+</html>
