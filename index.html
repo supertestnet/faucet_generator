@@ -40,6 +40,42 @@
                     resolve( returnable );
                 });
             }
+            var postData = async ( url, stringified_json, content_type = "", apikey = "" ) => {
+                var rtext = "";
+                function inner_post( url, stringified_json, content_type = "", apikey = "" ) {
+                    var xhttp = new XMLHttpRequest();
+                    xhttp.open( "POST", url, true );
+                    if ( content_type ) {
+                        xhttp.setRequestHeader( `Content-Type`, content_type );
+                    }
+                    if ( apikey ) {
+                        xhttp.setRequestHeader( `X-Api-Key`, apikey );
+                    }
+                    xhttp.send( stringified_json );
+                    return xhttp;
+                }
+                var data = inner_post( url, stringified_json, content_type, apikey );
+                data.onerror = function( e ) {
+                    rtext = "error";
+                }
+                async function isResponseReady() {
+                    return new Promise( function( resolve, reject ) {
+                        if ( rtext == "error" ) {
+                            resolve( rtext );
+                        }
+                        if ( !data.responseText || data.readyState != 4 ) {
+                            setTimeout( async function() {
+                                var msg = await isResponseReady();
+                                resolve( msg );
+                            }, 50 );
+                        } else {
+                            resolve( data.responseText );
+                        }
+                    });
+                }
+                var returnable = await isResponseReady();
+                return returnable;
+            }
             async function getUTXOs( privkey, network ) {
                 var url_half = `https://mempool.space/${network}`;
                 if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
@@ -58,6 +94,17 @@
                     obj.push( utxo );
                 });
                 return( obj );
+            }
+            var pushBTCpmt = async ( rawtx, network ) => {
+                var url_half = `https://mempool.space/${network}`;
+                if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
+                var txid = await postData( url_half + "api/tx", rawtx );
+                return txid;
+            }
+            var waitSomeSeconds = num => {
+                var num = num.toString() + "000";
+                num = Number( num );
+                return new Promise( resolve => setTimeout( resolve, num ) );
             }
         </script>
         <style>
@@ -196,7 +243,7 @@
                                 scriptPubKey: [ 1, utxo[ "pubkey" ] ],
                             }
                         });
-                    })
+                    });
                     var tx = tapscript.Tx.create({
                         vin,
                         vout: [{
@@ -212,9 +259,19 @@
                         tx.vin[ index ].witness = [ sig ];
                     });
                     var txhex = tapscript.Tx.encode( tx ).hex;
-                    console.log( 'broadcast this:' );
-                    console.log( txhex );
-                    alert( `broadcast the tx in your browser console` );
+                    // console.log( 'broadcast this:' );
+                    // console.log( txhex );
+                    var network = params[ "network" ] + "/";
+                    var txid = await pushBTCpmt( txhex, network );
+                    if ( txid.length === 64 ) var msg = `success, your txid is ${txid}`;
+                    else var msg = `error broadcasting your transaction: ${txid}`;
+                    setTimeout( async() => {
+                        utxos = await getUTXOs( privkey, network );
+                        var sum = 0;
+                        utxos.forEach( utxo => sum = sum + utxo[ "amount" ] );
+                        $( '.balance' ).innerText = sum.toLocaleString();
+                    }, 2000 );
+                    alert( msg );
                 }
                 var privkey = params[ "privkey" ];
                 var network = params[ "network" ] + "/";
