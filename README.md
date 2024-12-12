@@ -1,2 +1,2 @@
-# faucet_generator
+# Faucet generator
 Make your own testnet faucet
