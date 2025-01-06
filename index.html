@@ -6,6 +6,7 @@
         <script src="https://unpkg.com/@cmdcode/tapscript@1.4.0"></script>
         <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
         <script>
+            var bytesToHex = bytes => bytes.reduce( ( str, byte ) => str + byte.toString( 16 ).padStart( 2, "0" ), "" );
             var isValidAddress = address => {
                 try {
                     return !!tapscript.Address.decode( address ).script;
@@ -205,6 +206,7 @@
         <div class="setup hidden">
             <p>Enter a private key</p>
             <p><input class="privkey"></p>
+            <p><button class="generate_privkey">Generate private key</button></p>
             <p>Select a network</p>
             <select class="network_selector">
                 <option>Testnet3</option>
@@ -216,6 +218,10 @@
         </div>
         <script>
             var utxos = [];
+            $( '.generate_privkey' ).onclick = () => {
+                var privkey = bytesToHex( nobleSecp256k1.utils.randomPrivateKey() );
+                $( '.privkey' ).value = privkey;
+            }
             var runPrep = async () => {
                 var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
                 var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
