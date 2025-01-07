@@ -12,4 +12,4 @@ https://supertestnet.github.io/faucet_generator/#network=signet#privkey=abababab
 
 But replace signet with whatever network you want it to work on (options are: testnet | testnet4 | signet | mutinynet) and replace the privkey with the one you generated earlier.
 
-You can also *gift* people a faucet by funding one using a random private key and then sending them the link.
+You can also *gift* someone a faucet by generating a random private key for it, funding the resulting address, and then sending the link to whoever you want.
