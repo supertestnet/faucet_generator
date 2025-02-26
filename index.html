@@ -239,6 +239,7 @@
                     utxos.forEach( utxo => {
                         if ( utxo[ "amount" ] > 1000000000 ) utxos_i_will_use.push( utxo );
                     });
+                    if ( !utxos_i_will_use.length ) utxos_i_will_use = JSON.parse( JSON.stringify( utxos ) );
                     var sum = 0;
                     utxos_i_will_use.forEach( utxo => sum = sum + utxo[ "amount" ] );
                     var change_amnt = sum - amnt - ( 500 + ( 200 * utxos_i_will_use.length ) );
